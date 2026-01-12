@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bassaleg CS: Packet Sniffer</title>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --wjec-blue: #00305e; /* Bassaleg/WJEC theme */
+            --highlight: #e8f0f8;
+            --wireshark-header: #e6e6e6;
+            --border-color: #aaa;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --- Header --- */
+        header {
+            background-color: var(--wjec-blue);
+            color: white;
+            padding: 0.8rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 10;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            font-size: 0.8rem;
+            opacity: 0.8;
+            font-weight: 300;
+        }
+
+        /* --- Visual Network Diagram --- */
+        #network-view {
+            background-color: white;
+            padding: 20px;
+            height: 190px;
+            position: relative;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 50px;
+        }
+
+        /* Connecting Lines */
+        .network-line {
+            position: absolute;
+            top: 50%;
+            left: 15%;
+            right: 15%;
+            height: 4px;
+            background-color: #ddd;
+            z-index: 0;
+            border-radius: 2px;
+        }
+
+        .device {
+            position: relative;
+            z-index: 2;
+            text-align: center;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            width: 120px;
+            transition: transform 0.2s;
+            cursor: default;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .device i {
+            font-size: 2.5rem;
+            margin-bottom: 5px;
+            color: #555;
+        }
+
+        .device-label { font-weight: bold; font-size: 0.9rem; margin-bottom: 2px; }
+        .device-info { font-size: 0.7rem; color: #666; background: #f0f0f0; padding: 2px 4px; border-radius: 4px; display: inline-block; margin-bottom: 2px;}
+        
+        .device-ip {
+            font-size: 0.7rem;
+            font-family: 'Consolas', monospace;
+            color: #00305e;
+            background: #e8f0f8;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: inline-block;
+            border: 1px solid #d0e0f0;
+        }
+
+        /* Sniffer Specifics */
+        #sniffer-node i { color: #d9534f; }
+        #wap-node i { color: var(--wjec-blue); }
+        
+        /* Animation for Active Sniffing (ARP Poisoning) */
+        .attack-line {
+            position: absolute;
+            top: 52%; /* Offset slightly from main line */
+            left: 50%;
+            width: 0;
+            height: 2px;
+            background-color: #d9534f;
+            z-index: 1;
+            transition: all 0.5s ease;
+            transform: translateX(-50%);
+            opacity: 0;
+        }
+
+        .attack-active {
+            width: 60%; /* Stretch out to laptops */
+            opacity: 1;
+            animation: pulse-line 1s infinite;
+        }
+
+        @keyframes pulse-line {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+
+        /* --- Controls --- */
+        #controls {
+            background-color: #e9e9e9;
+            padding: 10px 20px;
+            border-bottom: 1px solid #bbb;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            font-size: 0.9rem;
+            flex-wrap: wrap; /* Allow wrapping on small screens */
+        }
+
+        select {
+            padding: 6px;
+            border: 1px solid #999;
+            border-radius: 4px;
+            background: white;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .control-group label {
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-bottom: 2px;
+            color: #444;
+        }
+
+        button.btn-clear {
+            margin-left: auto;
+            background: #fff;
+            border: 1px solid #aaa;
+            padding: 5px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #333;
+        }
+        button.btn-clear:hover { background: #fee; color: #d9534f; border-color: #d9534f; }
+
+        /* --- Packet List (Wireshark Style) --- */
+        #packet-pane {
+            flex: 2;
+            overflow-y: auto;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            border-bottom: 4px solid var(--border-color);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.85rem;
+            table-layout: fixed;
+        }
+
+        thead {
+            background-color: var(--wireshark-header);
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        th {
+            text-align: left;
+            padding: 6px 8px;
+            border-right: 1px solid #ccc;
+            border-bottom: 1px solid #999;
+            font-weight: bold;
+            color: #333;
+            user-select: none;
+            cursor: pointer; /* Clickable */
+            transition: background 0.2s;
+        }
+
+        th:hover {
+            background-color: #d0d0d0;
+        }
+        
+        th i {
+            font-size: 0.7rem;
+            color: #666;
+            margin-left: 4px;
+        }
+
+        td {
+            padding: 2px 8px;
+            border-right: 1px solid #eaeaea;
+            border-bottom: 1px solid #eaeaea;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+        }
+
+        /* Wireshark Colors */
+        .row-tcp { background-color: #e7e6ff; color: black; }
+        .row-http { background-color: #e4ffc7; color: black; }
+        .row-tls { background-color: #f0f0f0; color: #888; } 
+        .row-udp { background-color: #daeeff; color: black; }
+        .row-wpa { background-color: #333; color: #0f0; }
+
+        tr:hover { background-color: #dbeaff !important; }
+        tr.selected { background-color: var(--wjec-blue) !important; color: white !important; }
+
+        /* --- Packet Details --- */
+        #details-pane {
+            flex: 1;
+            background: white;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.85rem;
+        }
+
+        .details-title {
+            font-weight: bold;
+            border-bottom: 1px solid #ccc;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            color: var(--wjec-blue);
+        }
+
+        .hex-dump {
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+        
+        .highlight-red { color: #d9534f; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div>
+        <h1>Packet Sniffer Simulator</h1>
+        <div class="subtitle">GCSE Computer Science / Digital Technology</div>
+    </div>
+    <div id="status-indicator" style="background: #4caf50; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem;">
+        Running
+    </div>
+</header>
+
+<div id="network-view">
+    <div class="network-line"></div>
+    <div class="attack-line" id="attack-vis"></div>
+
+    <!-- Laptop A: MrJones (Insecure User) -->
+    <div class="device" id="dev-a">
+        <i class="fa-solid fa-laptop"></i>
+        <div class="device-label">Laptop A</div>
+        <div class="device-info">Mr Jones</div>
+        <div class="device-ip">192.168.1.105</div>
+    </div>
+
+    <!-- The Sniffer (Student) -->
+    <div class="device" id="sniffer-node">
+        <i class="fa-solid fa-user-secret"></i>
+        <div class="device-label">Sniffer</div>
+        <div class="device-info" id="sniffer-mode-label">Passive</div>
+        <div class="device-ip">192.168.1.200</div>
+    </div>
+
+    <!-- Wireless Access Point -->
+    <div class="device" id="wap-node">
+        <i class="fa-solid fa-wifi"></i>
+        <div class="device-label">WAP</div>
+        <div class="device-info" id="wap-mode-label">WEP</div>
+        <div class="device-ip">192.168.1.1</div>
+    </div>
+
+    <!-- Laptop B: Admin (Secure User) -->
+    <div class="device" id="dev-b">
+        <i class="fa-solid fa-laptop"></i>
+        <div class="device-label">Laptop B</div>
+        <div class="device-info">Admin</div>
+        <div class="device-ip">192.168.1.112</div>
+    </div>
+</div>
+
+<div id="controls">
+    <div class="control-group">
+        <label for="enc-select">Encryption Protocol</label>
+        <select id="enc-select" onchange="updateSettings()">
+            <option value="none">None (Open Network)</option>
+            <option value="wep" selected>WEP (Weak/Cracked)</option>
+            <option value="wpa3">WPA3 (Strong)</option>
+        </select>
+    </div>
+
+    <div class="control-group">
+        <label for="mode-select">Sniffing Mode</label>
+        <select id="mode-select" onchange="updateSettings()">
+            <option value="passive" selected>Passive (Listening)</option>
+            <option value="active">Active (ARP Poisoning)</option>
+        </select>
+    </div>
+
+    <div class="control-group">
+        <label for="filter-select">Display Filter (Source)</label>
+        <select id="filter-select" onchange="applyFilter()">
+            <option value="all">All Sources</option>
+            <option value="192.168.1.105">Laptop A (192.168.1.105)</option>
+            <option value="192.168.1.112">Laptop B (192.168.1.112)</option>
+        </select>
+    </div>
+
+    <button class="btn-clear" onclick="clearTable()">Clear Capture</button>
+</div>
+
+<div id="packet-pane">
+    <table>
+        <thead>
+            <tr>
+                <th onclick="sortTable(0)" style="width: 60px;">No. <i class="fa-solid fa-sort"></i></th>
+                <th onclick="sortTable(1)" style="width: 100px;">Time <i class="fa-solid fa-sort"></i></th>
+                <th onclick="sortTable(2)" style="width: 140px;">Source <i class="fa-solid fa-sort"></i></th>
+                <th onclick="sortTable(3)" style="width: 140px;">Destination <i class="fa-solid fa-sort"></i></th>
+                <th onclick="sortTable(4)" style="width: 80px;">Protocol <i class="fa-solid fa-sort"></i></th>
+                <th onclick="sortTable(5)">Info <i class="fa-solid fa-sort"></i></th>
+            </tr>
+        </thead>
+        <tbody id="packet-tbody">
+            <!-- Packets injected here -->
+        </tbody>
+    </table>
+</div>
+
+<div id="details-pane">
+    <div class="details-title">Packet Details (Select a packet to inspect)</div>
+    <div id="hex-content" class="hex-dump">Waiting for capture data...</div>
+</div>
+
+<script>
+    // --- State Management ---
+    let packetCount = 0;
+    const tbody = document.getElementById('packet-tbody');
+    const hexContent = document.getElementById('hex-content');
+    
+    // Settings
+    let currentEncryption = 'wep'; 
+    let currentMode = 'passive';   
+    let sortDirection = -1; // -1 for desc (newest first is default behavior for prepending), 1 for asc
+    let lastSortCol = -1;
+
+    // Mock Data
+    const laptopA = { ip: '192.168.1.105', name: 'Laptop A' };
+    const laptopB = { ip: '192.168.1.112', name: 'Laptop B' };
+    const serverIP = '104.26.4.15';
+
+    // --- Core Logic ---
+
+    function updateSettings() {
+        currentEncryption = document.getElementById('enc-select').value;
+        currentMode = document.getElementById('mode-select').value;
+
+        // Update UI Labels
+        document.getElementById('wap-mode-label').innerText = currentEncryption.toUpperCase();
+        document.getElementById('sniffer-mode-label').innerText = currentMode === 'active' ? "Active (ARP)" : "Passive";
+
+        // Handle Animation
+        const attackLine = document.getElementById('attack-vis');
+        if (currentMode === 'active') {
+            attackLine.classList.add('attack-active');
+        } else {
+            attackLine.classList.remove('attack-active');
+        }
+    }
+
+    function applyFilter() {
+        const filterVal = document.getElementById('filter-select').value;
+        const rows = document.querySelectorAll('#packet-tbody tr');
+        
+        rows.forEach(row => {
+            const srcIP = row.children[2].innerText;
+            if (filterVal === 'all' || srcIP === filterVal) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    function clearTable() {
+        tbody.innerHTML = '';
+        packetCount = 0;
+        hexContent.innerText = 'Capture cleared. Waiting for data...';
+    }
+
+    function shouldCapturePacket() {
+        return true; // Always show traffic for teaching visibility
+    }
+
+    function createPacket() {
+        if (!shouldCapturePacket()) return;
+
+        packetCount++;
+        const now = new Date();
+        const timeStr = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}.${Math.floor(now.getMilliseconds()/10)}`;
+
+        const isLaptopA = Math.random() > 0.5;
+        const src = isLaptopA ? laptopA : laptopB;
+        
+        let protocol = "TCP";
+        let info = "";
+        let rawPayload = "";
+        let cssClass = "row-tcp";
+
+        if (isLaptopA) {
+            if (Math.random() > 0.7) {
+                protocol = "HTTP";
+                info = "POST /login.php HTTP/1.1 (application/x-www-form-urlencoded)";
+                rawPayload = "User-Agent: Mozilla/5.0\nHost: bank-of-bassaleg.co.uk\n\nuser=mrjones&pass=Password123";
+                cssClass = "row-http";
+            } else {
+                protocol = "HTTP";
+                info = "GET /images/logo.png HTTP/1.1";
+                rawPayload = "User-Agent: Mozilla/5.0\nHost: bank-of-bassaleg.co.uk";
+                cssClass = "row-http";
+            }
+        } else {
+            protocol = "TLSv1.2";
+            info = "Application Data";
+            rawPayload = "[Encrypted Application Data]\n...7f 8a 2b 1c...";
+            cssClass = "row-tls";
+        }
+
+        if (currentEncryption === 'wpa3') {
+            protocol = "802.11";
+            info = "Encrypted Data (WPA3)";
+            cssClass = "row-tls"; 
+            rawPayload = "Payload is encrypted with CCMP/AES.\nCannot view content.";
+        } 
+        else if (currentEncryption === 'wep') {
+            info = `(WEP Decrypted) ${info}`;
+            rawPayload = `[WEP IV DETECTED - KEY FOUND]\n\n${rawPayload}`;
+        }
+
+        const row = document.createElement('tr');
+        row.className = cssClass;
+        row.innerHTML = `
+            <td>${packetCount}</td>
+            <td>${timeStr}</td>
+            <td>${src.ip}</td>
+            <td>${serverIP}</td>
+            <td>${protocol}</td>
+            <td>${info}</td>
+        `;
+
+        row.onclick = () => {
+            document.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+            row.classList.add('selected');
+            
+            let details = `Frame ${row.children[0].innerText}: ${row.children[4].innerText}\n`;
+            details += `Src: ${src.ip} (${src.name})\n`;
+            details += `Dst: ${serverIP} (Server)\n`;
+            
+            if (rawPayload.includes("pass=")) {
+                details += `\nPAYLOAD ANALYSIS:\n-----------------\n${rawPayload.replace("pass=Password123", "pass=Password123  <-- CREDENTIALS STOLEN")}`;
+            } else {
+                details += `\nPAYLOAD DUMP:\n-------------\n${rawPayload}`;
+            }
+            hexContent.innerText = details;
+        };
+
+        // Apply display filter immediately
+        const filterVal = document.getElementById('filter-select').value;
+        if (filterVal !== 'all' && src.ip !== filterVal) {
+            row.style.display = 'none';
+        }
+
+        tbody.prepend(row);
+        
+        // Increase limit slightly to account for hidden rows
+        if (tbody.children.length > 50) tbody.lastChild.remove();
+    }
+
+    // --- Sorting Logic ---
+    function sortTable(n) {
+        const rows = Array.from(tbody.rows);
+        
+        if (lastSortCol === n) {
+            sortDirection *= -1; 
+        } else {
+            sortDirection = 1; 
+            lastSortCol = n;
+        }
+
+        rows.sort((a, b) => {
+            let x = a.cells[n].innerText.toLowerCase();
+            let y = b.cells[n].innerText.toLowerCase();
+
+            if (n === 0) {
+                return (parseInt(x) - parseInt(y)) * sortDirection;
+            }
+
+            if (x < y) return -1 * sortDirection;
+            if (x > y) return 1 * sortDirection;
+            return 0;
+        });
+
+        rows.forEach(row => tbody.appendChild(row));
+    }
+
+    // Start Simulation Loop
+    setInterval(createPacket, 1500);
+
+</script>
+
+</body>
+</html>
