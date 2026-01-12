@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KS4 MitM Simulation - The RAM Heist</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --terminal-bg: #16213e;
+            --text-color: #eaeaea;
+            --accent-green: #0f3460;
+            --hacker-red: #e94560;
+            --alice-color: #4cc9f0;
+            --bob-color: #f72585;
+            --eve-color: #ffd60a;
+        }
+
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px;
+            background-color: var(--terminal-bg);
+            width: 100%;
+            border-bottom: 2px solid var(--eve-color);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+
+        h1 { margin: 0; color: var(--eve-color); }
+        p { margin: 5px 0 0; color: #aaa; }
+
+        .game-container {
+            display: flex;
+            justify-content: space-between;
+            width: 95%;
+            max-width: 1200px;
+            margin-top: 20px;
+            flex-grow: 1;
+            gap: 15px;
+        }
+
+        /* Columns */
+        .column {
+            flex: 1;
+            background-color: var(--terminal-bg);
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #333;
+            min-height: 500px;
+        }
+
+        .column-header {
+            font-weight: bold;
+            font-size: 1.2em;
+            text-align: center;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #444;
+            margin-bottom: 15px;
+        }
+
+        /* Identity Styles */
+        #alice-col { border-top: 4px solid var(--alice-color); }
+        #bob-col { border-top: 4px solid var(--bob-color); }
+        #eve-col { border-top: 4px solid var(--eve-color); box-shadow: 0 0 20px rgba(233, 69, 96, 0.1); }
+
+        .device-icon { font-size: 2em; display: block; margin-bottom: 5px; }
+
+        /* Chat Windows */
+        .chat-log {
+            flex-grow: 1;
+            background-color: #0d1117;
+            border-radius: 5px;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: sans-serif;
+            font-size: 0.9em;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .message {
+            padding: 8px 12px;
+            border-radius: 15px;
+            max-width: 80%;
+            animation: popIn 0.3s ease-out;
+            word-wrap: break-word;
+        }
+        
+        @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .msg-left { align-self: flex-start; background-color: #333; color: white; border-bottom-left-radius: 2px; }
+        .msg-right { align-self: flex-end; background-color: var(--alice-color); color: #000; border-bottom-right-radius: 2px; }
+        .msg-right-bob { align-self: flex-end; background-color: var(--bob-color); color: #fff; border-bottom-right-radius: 2px; }
+
+        /* Middle Man Console */
+        #packet-viewer {
+            background-color: #000;
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            padding: 15px;
+            border: 2px solid #333;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            min-height: 120px;
+            position: relative;
+        }
+
+        .packet-label {
+            position: absolute;
+            top: -10px;
+            left: 10px;
+            background: var(--eve-color);
+            color: #000;
+            padding: 2px 8px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        textarea {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: #0f0;
+            font-family: inherit;
+            font-size: 1em;
+            resize: none;
+            outline: none;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        button {
+            padding: 10px 15px;
+            font-size: 0.9em;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #btn-forward { background-color: var(--alice-color); color: #000; }
+        #btn-forward:hover:not(:disabled) { background-color: #8be9fd; }
+
+        #btn-modify { background-color: var(--hacker-red); color: #fff; }
+        #btn-modify:hover:not(:disabled) { background-color: #ff6b6b; }
+        
+        #btn-drop { background-color: #555; color: #fff; border: 1px solid #777; }
+        #btn-drop:hover:not(:disabled) { background-color: #333; color: #ff5555; border-color: #ff5555; }
+        
+        #btn-reset { background-color: #fff; color: #000; display: none; }
+        #btn-reset:hover { background-color: #ddd; }
+
+        .hidden { display: none !important; }
+
+        .status-bar {
+            margin-top: 20px;
+            padding: 10px;
+            background: #222;
+            width: 100%;
+            text-align: center;
+            font-size: 0.9em;
+            color: #888;
+        }
+
+        /* Direction Arrow */
+        #direction-display {
+            text-align: center;
+            margin-bottom: 8px;
+            font-weight: bold;
+            font-size: 1.1em;
+            color: var(--eve-color);
+            text-shadow: 0 0 5px rgba(255, 214, 10, 0.3);
+            letter-spacing: 2px;
+        }
+
+        /* Success Overlay */
+        #overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            text-align: center;
+        }
+        .success-box {
+            background: var(--terminal-bg);
+            border: 2px solid var(--eve-color);
+            padding: 40px;
+            max-width: 600px;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+        }
+        .success-box h2 { color: var(--eve-color); margin-top: 0; }
+        .highlight-text { color: var(--hacker-red); font-weight: bold; }
+        
+        .overlay-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 25px;
+        }
+
+        /* NEW: Mission Panel Style */
+        .mission-panel {
+            background-color: #2c2c3e;
+            color: #fff;
+            padding: 15px;
+            width: 100%;
+            text-align: center;
+            border-bottom: 2px solid var(--eve-color);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            font-size: 1.1em;
+            z-index: 10;
+        }
+
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Man-in-the-Middle Simulator</h1>
+    <p>Scenario: The DDR5 RAM Heist</p>
+</header>
+
+<!-- NEW: Persistent Mission Display -->
+<div class="mission-panel">
+    🎯 <strong>OBJECTIVE:</strong> Intercept the address packet. Change it to: <span style="color: var(--eve-color); text-decoration: underline;">Unit 1, Bassaleg Road</span>
+</div>
+
+<!-- CHANGED: Status Bar is now purely for system status updates -->
+<div class="status-bar" id="instruction-bar">
+    System Initializing...
+</div>
+
+<div class="game-container">
+    <!-- Alice (Seller) -->
+    <div class="column" id="alice-col">
+        <div class="column-header">
+            <span class="device-icon">💻</span>
+            Seller (Alice)
+        </div>
+        <div class="chat-log" id="alice-chat">
+            <!-- Chat history appears here -->
+        </div>
+    </div>
+
+    <!-- Eve (The Attacker/Student) -->
+    <div class="column" id="eve-col">
+        <div class="column-header">
+            <span class="device-icon">🕵️</span>
+            YOU (Attacker)
+        </div>
+        
+        <div style="margin-bottom: 10px; color: #aaa; font-size: 0.9em;">
+            Incoming Packet Buffer:
+        </div>
+
+        <div id="packet-viewer">
+            <span class="packet-label">PACKET SNIFFER</span>
+            <div id="direction-display">WAITING...</div>
+            <textarea id="packet-content" rows="4" readonly></textarea>
+        </div>
+
+        <div class="controls">
+            <button id="btn-drop" onclick="dropPacket()">DROP 🗑️</button>
+            <button id="btn-forward" onclick="forwardPacket()">FORWARD >></button>
+            <button id="btn-modify" onclick="enableEdit()">MODIFY 📝</button>
+            <button id="btn-reset" onclick="location.reload()">RESTART ↻</button>
+        </div>
+        
+        <div style="margin-top: 20px; font-size: 0.8em; color: #666;">
+            <strong>Log:</strong><br>
+            <span id="log-output">Listening for traffic...</span>
+        </div>
+    </div>
+
+    <!-- Bob (Buyer) -->
+    <div class="column" id="bob-col">
+        <div class="column-header">
+            <span class="device-icon">📱</span>
+            Buyer (Bob)
+        </div>
+        <div class="chat-log" id="bob-chat">
+            <!-- Chat history appears here -->
+        </div>
+    </div>
+</div>
+
+<!-- Success Overlay -->
+<div id="overlay" class="hidden">
+    <div class="success-box">
+        <h2>ATTACK SUCCESSFUL</h2>
+        <p>You successfully intercepted and altered the communication.</p>
+        <p>The seller has shipped the item to <span class="highlight-text">YOUR</span> address.</p>
+        <hr style="border: 0; border-top: 1px solid #444; margin: 20px 0;">
+        <p style="text-align: left; font-size: 0.9em;">
+            <strong>Concepts Demonstrated:</strong><br><br>
+            1. <strong>Interception:</strong> You saw data (Address) not meant for you.<br>
+            2. <strong>Modification:</strong> You altered the data (Integrity violation).<br>
+            3. <strong>Trust:</strong> Neither Alice nor Bob knew you were there.
+        </p>
+        <div class="overlay-buttons">
+            <button onclick="reviewEvidence()" style="background: #444; color: white; border: 1px solid #666;">REVIEW EVIDENCE 🔍</button>
+            <button onclick="location.reload()" style="background: var(--eve-color); color: black;">REPLAY SIMULATION ↻</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Game State
+    let currentStep = 0;
+    let isEditing = false;
+    let currentPacket = null;
+    let attackSuccessful = false;
+    let addressModifiedButWrong = false; // New flag to track incorrect edits
+
+    // The Scripted Conversation
+    const conversation = [
+        { from: 'Alice', to: 'Bob', text: "Hi! I have that 32GB DDR5 RAM kit you wanted. Still interested?" },
+        { from: 'Bob', to: 'Alice', text: "Definitely! The price of RAM is crazy right now. Is it £80?" },
+        { from: 'Alice', to: 'Bob', text: "Yes, £80. Box is open but never used. Do you want it?" },
+        { from: 'Bob', to: 'Alice', text: "Deal. Send me your payment details." },
+        { from: 'Alice', to: 'Bob', text: "Bank Transfer: Sort 20-00-00, Acc 12345678. Name: A. Smith." },
+        { from: 'Bob', to: 'Alice', text: "Paid! Please ship to: 12 High St, Newport, NP10 8XX." }, // TARGET MESSAGE
+        { from: 'Alice', to: 'Bob', text: "Got it. I'll post it tomorrow to the address you sent." }
+    ];
+
+    // DOM Elements
+    const aliceChat = document.getElementById('alice-chat');
+    const bobChat = document.getElementById('bob-chat');
+    const packetViewer = document.getElementById('packet-content');
+    const btnForward = document.getElementById('btn-forward');
+    const btnModify = document.getElementById('btn-modify');
+    const btnDrop = document.getElementById('btn-drop');
+    const btnReset = document.getElementById('btn-reset');
+    const logOutput = document.getElementById('log-output');
+    const instructionBar = document.getElementById('instruction-bar');
+    const directionDisplay = document.getElementById('direction-display');
+    const overlay = document.getElementById('overlay');
+
+    // Initial Setup
+    function loadNextPacket() {
+        if (currentStep >= conversation.length) {
+            handleEndOfConversation();
+            return;
+        }
+
+        currentPacket = conversation[currentStep];
+        
+        // --- NEW: Add message to Sender's chat IMMEDIATELY ---
+        // This simulates the sender pressing "Send". It is now in the 'ether' (Eve's buffer).
+        const senderChatId = currentPacket.from === 'Alice' ? 'alice-chat' : 'bob-chat';
+        addMessageToChat(currentPacket.from, currentPacket.text, senderChatId);
+
+        // --- NEW: Directional Arrows & Button Text ---
+        if (currentPacket.from === 'Alice') {
+            directionDisplay.innerHTML = "ALICE &rarr;&rarr;&rarr; BOB";
+            btnForward.innerHTML = "FORWARD &gt;&gt;";
+        } else {
+            directionDisplay.innerHTML = "ALICE &larr;&larr;&larr; BOB";
+            btnForward.innerHTML = "&lt;&lt; FORWARD";
+        }
+        
+        // Visual cues for packet viewer
+        let senderIcon = currentPacket.from === 'Alice' ? "💻 Alice" : "📱 Bob";
+        let receiverIcon = currentPacket.from === 'Alice' ? "Bob" : "Alice";
+
+        packetViewer.value = `[FROM: ${senderIcon}] [TO: ${receiverIcon}]\nPAYLOAD: "${currentPacket.text}"`;
+        
+        // Reset controls
+        packetViewer.readOnly = true;
+        packetViewer.style.color = "#0f0";
+        packetViewer.style.border = "none";
+        isEditing = false;
+        btnModify.innerText = "MODIFY 📝";
+        
+        logOutput.innerText = `Packet captured from ${currentPacket.from}. Waiting for action...`;
+        
+        // Active Learning Hint
+        if (currentPacket.text.includes("Newport")) {
+            instructionBar.innerText = "⚠️ TARGET IDENTIFIED! This contains the address. Modify it to the Objective (see above)!";
+            instructionBar.style.color = "var(--eve-color)";
+            instructionBar.style.fontWeight = "bold";
+            btnModify.style.animation = "popIn 1s infinite alternate"; // Draw attention
+        } else {
+            instructionBar.innerText = "Scanning traffic... Forward normal messages to keep suspicion low.";
+            instructionBar.style.color = "#888";
+            instructionBar.style.fontWeight = "normal";
+            btnModify.style.animation = "none";
+        }
+    }
+
+    function forwardPacket() {
+        if (currentStep >= conversation.length) return;
+
+        let payload = "";
+        
+        if (isEditing) {
+            payload = packetViewer.value;
+        } else {
+            payload = currentPacket.text;
+        }
+
+        // Logic Check: Did they modify the target message?
+        if (currentStep === 5) { // The address message
+            if (payload.toLowerCase().includes("bassaleg")) {
+                attackSuccessful = true;
+                logOutput.innerText = "Packet inject successful!";
+                
+                // Only add to Receiver's chat
+                const receiverChatId = currentPacket.from === 'Alice' ? 'bob-chat' : 'alice-chat';
+                addMessageToChat('Bob', payload, receiverChatId); // Sender is 'Bob' (original), but payload is new
+                
+                setTimeout(() => {
+                    // Trigger Alice's confirmation based on the hacked info
+                    addMessageToChat('Alice', "Got it. Shipping to Bassaleg Road.", 'alice-chat');
+                    // Manually inject the final message to Bob too so the simulation feels complete before overlay
+                    setTimeout(() => {
+                         addMessageToChat('Alice', "Got it. Shipping to Bassaleg Road.", 'bob-chat');
+                    }, 500);
+
+                    setTimeout(() => {
+                        overlay.classList.remove('hidden');
+                    }, 2000);
+                }, 1000);
+                return; // Stop the loop here
+            } else if (payload !== currentPacket.text) {
+                logOutput.innerText = "Packet modified (Generic)";
+                addressModifiedButWrong = true; // Mark that they attempted a hack but failed the specific objective
+            }
+        }
+
+        // Standard Forwarding Logic
+        // We only update the RECEIVER'S log now, because Sender log was updated in loadNextPacket
+        const receiverChatId = currentPacket.from === 'Alice' ? 'bob-chat' : 'alice-chat';
+        
+        // Small delay to simulate "Network Travel"
+        setTimeout(() => {
+             addMessageToChat(currentPacket.from, payload, receiverChatId);
+        }, 300);
+
+        currentStep++;
+        // Load next packet after a delay
+        setTimeout(loadNextPacket, 1000);
+    }
+
+    function dropPacket() {
+        if (currentStep >= conversation.length) return;
+        
+        // Log the drop action
+        logOutput.innerText = `PACKET DROPPED! ${currentPacket.from}'s message was deleted.`;
+        logOutput.style.color = "#ff5555";
+        
+        // Visually indicate destruction in the packet sniffer
+        packetViewer.value = "/// PACKET DESTROYED ///";
+        packetViewer.style.color = "#555";
+        
+        // Note: We intentionally do NOT call addMessageToChat for the receiver.
+        // This simulates the packet loss/denial of service.
+        
+        currentStep++;
+        
+        // If we drop the last message, we need to handle end of conversation manually here
+        // or let loadNextPacket handle it on next tick
+        setTimeout(() => {
+            logOutput.style.color = "#666"; // Reset log color
+            loadNextPacket();
+        }, 1500);
+    }
+
+    function addMessageToChat(sender, text, chatBoxId) {
+        const chatBox = document.getElementById(chatBoxId);
+        const div = document.createElement('div');
+        div.classList.add('message');
+        
+        if (chatBoxId === 'alice-chat') {
+            if (sender === 'Alice') div.classList.add('msg-right');
+            else div.classList.add('msg-left');
+        } else {
+            if (sender === 'Bob') div.classList.add('msg-right-bob');
+            else div.classList.add('msg-left');
+        }
+
+        div.innerText = text;
+        chatBox.appendChild(div);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function enableEdit() {
+        isEditing = true;
+        packetViewer.readOnly = false;
+        packetViewer.focus();
+        packetViewer.style.color = "var(--hacker-red)";
+        packetViewer.style.border = "1px solid var(--hacker-red)";
+        packetViewer.value = currentPacket.text;
+        
+        btnModify.innerText = "EDITING...";
+        logOutput.innerText = "Packet intercepted. Pausing stream for modification...";
+    }
+
+    function handleEndOfConversation() {
+        logOutput.innerText = "Connection closed.";
+        packetViewer.value = "/// NO SIGNAL ///";
+        directionDisplay.innerHTML = "CONNECTION TERMINATED";
+        directionDisplay.style.color = "#555";
+        
+        // Hide Play buttons
+        btnForward.style.display = 'none';
+        btnModify.style.display = 'none';
+        btnDrop.style.display = 'none';
+        
+        // Show Reset
+        btnReset.style.display = 'block';
+
+        if (!attackSuccessful) {
+            if (addressModifiedButWrong) {
+                instructionBar.innerText = "MISSION FAILED: You modified the address, but not to 'Unit 1, Bassaleg Road'. The RAM was shipped to the wrong location!";
+            } else {
+                instructionBar.innerText = "MISSION FAILED: The conversation ended without you modifying the shipping address.";
+            }
+            instructionBar.style.color = "#ff5555";
+        }
+    }
+
+    function reviewEvidence() {
+        overlay.classList.add('hidden'); // Hide the overlay
+        
+        // Update UI to reflect "Post-Game" state
+        instructionBar.innerText = "SIMULATION COMPLETE. Review the chat logs above to see the data manipulation.";
+        instructionBar.style.color = "#fff";
+        
+        // Disable game buttons
+        btnForward.style.display = 'none';
+        btnModify.style.display = 'none';
+        btnDrop.style.display = 'none';
+        
+        // Show Reset button
+        btnReset.style.display = 'block';
+        
+        logOutput.innerText = "Attack execution finished. Connection terminated.";
+        packetViewer.value = "/// NO SIGNAL ///";
+        packetViewer.style.color = "#555";
+        directionDisplay.innerHTML = "";
+    }
+
+    // Start
+    loadNextPacket();
+
+</script>
+
+</body>
+</html>
