@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>GCSE Computer Science Data Interception and Theft Simulations</title>
+    <style>
+        :root{
+            --wjec-blue:#00305e;
+            --accent:#2b6cb0;
+            --bg:#f4f6f8;
+            --card:#ffffff;
+            --muted:#718096;
+            --success:#38a169;
+            --danger:#e53e3e;
+        }
+        *{box-sizing:border-box}
+        body{font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;margin:0;background:var(--bg);color:#2d3748}
+        header{background:var(--wjec-blue);color:white;padding:18px 24px;display:flex;align-items:center;justify-content:space-between}
+        header h1{margin:0;font-size:1.1rem}
+        header p{margin:0;opacity:0.9;font-size:0.9rem}
+
+        main{max-width:1200px;margin:28px auto;padding:0 20px}
+        .intro{background:var(--card);padding:18px;border-radius:8px;box-shadow:0 4px 10px rgba(0,0,0,0.04);margin-bottom:20px}
+        .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+
+        .card{background:var(--card);border-radius:8px;padding:16px;border:1px solid #e6eef6;box-shadow:0 6px 12px rgba(12,32,63,0.04);display:flex;flex-direction:column;gap:10px}
+        .card .label{font-weight:700;color:var(--accent);display:flex;align-items:center;gap:10px}
+        .card .desc{color:var(--muted);font-size:0.95rem;line-height:1.4}
+        .card .actions{margin-top:auto;display:flex;gap:10px}
+        .btn{padding:8px 12px;border-radius:6px;border:none;cursor:pointer;font-weight:700}
+        .btn-primary{background:var(--accent);color:white}
+        .btn-ghost{background:transparent;border:1px solid #dbeaf6;color:var(--accent)}
+
+        .meta{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:0.9rem}
+
+        footer{max-width:1200px;margin:18px auto 36px;padding:0 20px;color:var(--muted);font-size:0.9rem}
+
+        /* small touches */
+        .emoji{font-size:1.6rem}
+        .teacher-note{background:#fffaf0;border-left:4px solid #ed8936;padding:10px;border-radius:6px;font-size:0.95rem}
+
+        @media (max-width:520px){header{flex-direction:column;align-items:flex-start;gap:8px}}
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <h1>GCSE Computer Science<br>Data Interception and Theft Simulations</h1>
+            <p>Interactive classroom simulations demonstrating packet sniffing and session hijacking</p>
+        </div>
+        <div style="text-align:right">
+            <div style="font-size:0.9rem">Prepared for classroom use</div>
+            <div style="font-size:0.8rem;color:#cfe6ff;margin-top:6px">Bassaleg School / WJEC</div>
+        </div>
+    </header>
+
+    <main>
+        <section class="intro">
+            <div style="display:flex;justify-content:space-between;gap:16px;align-items:center">
+                <div>
+                    <div style="font-weight:800;font-size:1.05rem">Overview</div>
+                    <div style="color:var(--muted);margin-top:6px">Use these browser-based activities to demonstrate how unencrypted networks and session cookies can be exploited. Each page includes interactive elements and teacher notes for classroom delivery.</div>
+                </div>
+                <div class="meta">
+                    <div>🧪 <strong>Simulations:</strong> 2</div>
+                    <div>📚 <strong>Teacher Notes:</strong> 1</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid">
+            <article class="card">
+                <div class="label"><span class="emoji">🕵️‍♂️</span> Session Hijacking Simulation</div>
+                <div class="desc">Demonstrates how an unencrypted session cookie can be observed and injected to impersonate a user. Students play the role of an attacker or victim.</div>
+                <div class="actions">
+                    <a class="btn btn-primary" href="SessionHijacking.html">Open Simulation</a>
+                    <a class="btn btn-ghost" href="#" onclick="alert('This opens in the same tab: SessionHijacking.html')">More Info</a>
+                </div>
+                <div style="margin-top:8px;color:var(--muted);font-size:0.85rem">File: <code>SessionHijacking.html</code></div>
+            </article>
+
+            <article class="card">
+                <div class="label"><span class="emoji">🔎</span> Packet Sniffer Simulator</div>
+                <div class="desc">Simulates network traffic capture (Wireshark-style) and shows how unencrypted credentials and payloads can be read. Includes filtering and packet inspection.</div>
+                <div class="actions">
+                    <a class="btn btn-primary" href="PacketSniffing.html">Open Simulator</a>
+                    <a class="btn btn-ghost" href="#" onclick="alert('This opens in the same tab: PacketSniffing.html')">More Info</a>
+                </div>
+                <div style="margin-top:8px;color:var(--muted);font-size:0.85rem">File: <code>PacketSniffing.html</code></div>
+            </article>
+
+            <article class="card">
+                <div class="label"><span class="emoji">📘</span> Teacher Notes & Activity</div>
+                <div class="desc">Guidance and classroom activity resources to run these simulations, with suggested questions and assessment pointers.</div>
+                <div class="actions">
+                    <a class="btn btn-primary" href="TeacherNotes/PacketSniffingActivity.md">Open Notes</a>
+                    <a class="btn btn-ghost" href="README.md">Project README</a>
+                </div>
+                <div style="margin-top:8px;color:var(--muted);font-size:0.85rem">Location: <code>TeacherNotes/PacketSniffingActivity.md</code></div>
+            </article>
+
+        </section>
+
+        <section style="margin-top:18px">
+            <div class="teacher-note">
+                <strong>Tip:</strong> Open the simulators in separate tabs for classroom demonstrations so students can compare attacker vs victim behaviours side-by-side. ✅
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div>© Bassaleg School — GCSE Computer Science resources • Files are local; open the HTML files to start the simulations.</div>
+    </footer>
+</body>
+</html>
