@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dai's Ducklings - Session Hijacking Sim</title>
+    <style>
+        :root {
+            --bg-color: #f0f4f8;
+            --text-color: #2d3748;
+            --accent-color: #3182ce;
+            --danger-color: #e53e3e;
+            --success-color: #38a169;
+            --browser-bg: #ffffff;
+            --header-height: 40px;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            color: #2c5282;
+        }
+
+        .simulation-container {
+            display: flex;
+            flex: 1;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* --- Common Browser Window Styles --- */
+        .browser-window {
+            flex: 1;
+            background: var(--browser-bg);
+            border-radius: 8px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+        }
+
+        .browser-header {
+            height: var(--header-height);
+            background: #cbd5e0;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            gap: 8px;
+        }
+
+        .traffic-light {
+            display: flex;
+            gap: 6px;
+        }
+
+        .dot { width: 10px; height: 10px; border-radius: 50%; }
+        .red { background-color: #fc8181; }
+        .yellow { background-color: #f6e05e; }
+        .green { background-color: #68d391; }
+
+        .url-bar {
+            flex: 1;
+            background: white;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 0.85rem;
+            color: #4a5568;
+            margin-left: 10px;
+            font-family: monospace;
+        }
+
+        .browser-content {
+            padding: 20px;
+            flex: 1;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        /* --- Specific Panel Styling --- */
+        #victim-panel { border-top: 5px solid var(--success-color); }
+        #attacker-panel { border-top: 5px solid var(--danger-color); }
+        
+        .panel-label {
+            text-align: center;
+            font-weight: bold;
+            padding: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.9rem;
+        }
+
+        /* --- The Shop UI --- */
+        .shop-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #edf2f7;
+            padding-bottom: 15px;
+            margin-bottom: 15px;
+        }
+
+        .logo { font-size: 1.5rem; font-weight: bold; color: #2b6cb0; }
+        .balance-box { 
+            background: #ebf8ff; 
+            padding: 5px 15px; 
+            border-radius: 20px; 
+            font-weight: bold; 
+            color: #2c5282;
+            border: 1px solid #bee3f8;
+        }
+
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 15px;
+        }
+
+        .product-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            transition: transform 0.1s;
+        }
+
+        .product-card:hover { transform: translateY(-2px); border-color: #bee3f8; }
+        .duck-emoji { font-size: 2.5rem; display: block; margin-bottom: 5px; }
+        .duck-name { font-weight: bold; font-size: 0.9rem; margin-bottom: 5px; }
+        .duck-price { color: #718096; font-size: 0.85rem; margin-bottom: 10px; }
+        
+        .btn-buy {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        .btn-buy:hover { background: #2b6cb0; }
+        .btn-buy:disabled { background: #cbd5e0; cursor: not-allowed; }
+
+        /* --- Middle Panel (Network) --- */
+        #network-panel {
+            flex: 0 0 250px;
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .network-stream {
+            width: 100%;
+            height: 80%;
+            background: #2d3748;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', Courier, monospace;
+            color: #48bb78;
+            font-size: 0.8rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            position: relative;
+        }
+
+        .packet {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid #48bb78;
+            padding: 8px;
+            margin-top: 10px;
+            border-radius: 4px;
+            animation: fadeIn 0.5s ease-in;
+            word-break: break-all;
+        }
+
+        .packet-label { color: #a0aec0; font-size: 0.7rem; display: block; margin-bottom: 2px; }
+        .packet-data { font-weight: bold; color: #fff; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* --- Hacker Tools --- */
+        .hacker-overlay {
+            background: #2d3748;
+            color: white;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 6px;
+        }
+        .hacker-title { font-size: 0.9rem; text-transform: uppercase; color: #fc8181; margin-bottom: 10px; font-weight: bold; }
+        
+        .hacker-input {
+            width: 100%;
+            padding: 8px;
+            background: #1a202c;
+            border: 1px solid #4a5568;
+            color: #68d391;
+            font-family: monospace;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+
+        .btn-hack {
+            width: 100%;
+            background: #e53e3e;
+            color: white;
+            border: none;
+            padding: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .btn-hack:hover { background: #c53030; }
+
+        /* Login Screen */
+        .login-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+        .login-form input {
+            display: block;
+            margin-bottom: 10px;
+            padding: 8px;
+            width: 200px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+        }
+        .btn-login {
+            background: var(--success-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        /* Utility */
+        .hidden { display: none !important; }
+        .highlight-red { animation: flashRed 1s; }
+        
+        @keyframes flashRed {
+            0% { background-color: rgba(229, 62, 62, 0.5); }
+            100% { background-color: transparent; }
+        }
+
+        .instruction-box {
+            background: #fffaf0;
+            border-left: 4px solid #ed8936;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+        }
+
+    </style>
+</head>
+<body>
+
+    <h1>GCSE Computer Science: Session Hijacking Simulation</h1>
+
+    <div class="simulation-container">
+        
+        <!-- COLUMN 1: VICTIM (Alice) -->
+        <div class="browser-window" id="victim-panel">
+            <div class="panel-label" style="color: var(--success-color);">Victim (Alice)</div>
+            <div class="browser-header">
+                <div class="traffic-light">
+                    <div class="dot red" onclick="closeVictimWindow()" title="Close Browser" style="cursor: pointer;"></div>
+                    <div class="dot yellow"></div>
+                    <div class="dot green"></div>
+                </div>
+                <div class="url-bar">http://www.dais-ducklings.wales/shop</div>
+            </div>
+            <div class="browser-content" id="victim-content">
+                <!-- Content injected via JS -->
+            </div>
+        </div>
+
+        <!-- COLUMN 2: NETWORK (The Wire) -->
+        <div id="network-panel">
+            <div class="panel-label">Unencrypted Network</div>
+            <div class="network-stream" id="network-log">
+                <div style="text-align: center; color: #718096; margin-top: auto;">Waiting for traffic...</div>
+            </div>
+        </div>
+
+        <!-- COLUMN 3: ATTACKER (Student) -->
+        <div class="browser-window" id="attacker-panel">
+            <div class="panel-label" style="color: var(--danger-color);">Attacker (You)</div>
+            <div class="browser-header">
+                <div class="traffic-light">
+                    <div class="dot red"></div>
+                    <div class="dot yellow"></div>
+                    <div class="dot green"></div>
+                </div>
+                <div class="url-bar">http://www.dais-ducklings.wales/login</div>
+            </div>
+            <div class="browser-content">
+                
+                <div class="instruction-box">
+                    <strong>Task:</strong> Wait for Alice to log in. Find her Session ID in the network traffic. Inject it below to steal her account.
+                </div>
+
+                <div id="attacker-view-container">
+                    <!-- Default State -->
+                    <div class="login-screen" id="attacker-login-screen">
+                        <h2>Login Required</h2>
+                        <p style="color: #718096; margin-bottom: 20px;">Please log in to access your account.</p>
+                        <form class="login-form" onsubmit="event.preventDefault(); alert('You do not know the password!');">
+                            <input type="text" placeholder="Username" disabled>
+                            <input type="password" placeholder="Password" disabled>
+                            <button class="btn-login" style="background-color: #cbd5e0; cursor: not-allowed;">Login</button>
+                        </form>
+                    </div>
+
+                    <!-- Shop View (Hidden until hijacked) -->
+                    <div id="attacker-shop-view" class="hidden">
+                        <!-- Content injected via JS -->
+                    </div>
+                </div>
+
+                <!-- HACKER TOOLS -->
+                <div class="hacker-overlay">
+                    <div class="hacker-title">🛠 Hacker Developer Tools</div>
+                    <div style="font-size: 0.8rem; margin-bottom: 5px; color: #a0aec0;">Current Session Cookie:</div>
+                    <input type="text" id="hacker-cookie-input" class="hacker-input" placeholder="e.g. SESSION-ID...">
+                    <button class="btn-hack" onclick="attemptHijack()">INJECT COOKIE & REFRESH</button>
+                    <div id="hack-status" style="margin-top: 5px; font-size: 0.8rem; height: 1.2em;"></div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- SIMULATION STATE ---
+        const gameState = {
+            sessionID: null,        // The active session ID on the server
+            isVictimActive: false,  // Is Alice's window open/logged in?
+            isHijacked: false,      // Has the attacker successfully injected the ID?
+            
+            // Shared Server Data (The "Database")
+            account: {
+                username: "Alice_Jones_99",
+                balance: 1000,
+                cart: []
+            }
+        };
+
+        const products = [
+            { id: 1, name: "Mallard", price: 50, emoji: "🦆" },
+            { id: 2, name: "Welsh Harlequin", price: 200, emoji: "🦢" },
+            { id: 3, name: "Muscovy", price: 100, emoji: "🐥" },
+            { id: 4, name: "Golden Cascade", price: 500, emoji: "👑" }
+        ];
+
+        // --- DOM ELEMENTS ---
+        const victimContent = document.getElementById('victim-content');
+        const networkLog = document.getElementById('network-log');
+        const attackerLoginScreen = document.getElementById('attacker-login-screen');
+        const attackerShopView = document.getElementById('attacker-shop-view');
+        const hackerInput = document.getElementById('hacker-cookie-input');
+        const hackStatus = document.getElementById('hack-status');
+
+        // --- INIT ---
+        function init() {
+            renderVictimLogin();
+        }
+
+        // --- VICTIM ACTIONS ---
+
+        function renderVictimLogin() {
+            gameState.isVictimActive = false;
+            victimContent.innerHTML = `
+                <div class="login-screen">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <span style="font-size: 3rem;">🦆</span>
+                        <h2 style="color: #2b6cb0; margin: 0;">Dai's Ducklings</h2>
+                    </div>
+                    <div class="login-form">
+                        <input type="text" value="Alice_Jones_99" readonly>
+                        <input type="password" value="********" readonly>
+                        <button class="btn-login" onclick="victimLogin()">Log In</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function victimLogin() {
+            // Generate a random Session ID
+            const randomNum = Math.floor(Math.random() * 8999) + 1000;
+            gameState.sessionID = `DAI-${randomNum}-QUACK`;
+            gameState.isVictimActive = true;
+            
+            // Visualise the packet
+            logNetworkPacket("POST /login", "Credentials: Valid");
+            setTimeout(() => {
+                logNetworkPacket("RESPONSE: 200 OK", `Set-Cookie: ID=${gameState.sessionID}`);
+            }, 800);
+
+            renderVictimShop();
+        }
+
+        function closeVictimWindow() {
+            // NOTE: We do NOT clear the sessionID. That is the vulnerability.
+            // We just clear the view.
+            gameState.isVictimActive = false;
+            victimContent.innerHTML = `
+                <div class="login-screen" style="background-color: #2d3748; color: white; border-radius: 8px;">
+                    <p>Browser Window Closed.</p>
+                    <button style="margin-top:10px; padding: 5px;" onclick="renderVictimLogin()">Re-open Browser</button>
+                </div>
+            `;
+        }
+
+        function renderVictimShop() {
+            if (!gameState.isVictimActive) return;
+
+            victimContent.innerHTML = generateShopHTML(false);
+        }
+
+        // --- ATTACKER ACTIONS ---
+
+        function attemptHijack() {
+            const inputID = hackerInput.value.trim();
+            
+            if (inputID === "") {
+                hackStatus.textContent = "Error: No Cookie ID entered.";
+                hackStatus.style.color = "#fc8181";
+                return;
+            }
+
+            if (inputID === gameState.sessionID) {
+                // SUCCESS
+                gameState.isHijacked = true;
+                hackStatus.textContent = "Access Granted! Session Valid.";
+                hackStatus.style.color = "#68d391";
+                
+                // Switch views
+                attackerLoginScreen.classList.add('hidden');
+                attackerShopView.classList.remove('hidden');
+                renderAttackerShop();
+            } else {
+                // FAIL
+                hackStatus.textContent = "Error: Invalid or Expired Session ID.";
+                hackStatus.style.color = "#fc8181";
+                attackerLoginScreen.classList.remove('hidden');
+                attackerShopView.classList.add('hidden');
+            }
+        }
+
+        function renderAttackerShop() {
+            if (!gameState.isHijacked) return;
+            attackerShopView.innerHTML = generateShopHTML(true);
+        }
+
+        // --- SHARED LOGIC (The Server) ---
+
+        function buyItem(price, isAttacker) {
+            if (gameState.account.balance >= price) {
+                gameState.account.balance -= price;
+                
+                // REFRESH BOTH SCREENS (Synchronised State)
+                // This simulates the server state changing, so anyone viewing the account sees the change
+                if (gameState.isVictimActive) renderVictimShop();
+                if (gameState.isHijacked) renderAttackerShop();
+
+                // Log the transaction
+                if (isAttacker) {
+                    logNetworkPacket("POST /buy", `Cookie: ${gameState.sessionID} (Attacker)`);
+                } else {
+                    logNetworkPacket("POST /buy", `Cookie: ${gameState.sessionID} (Alice)`);
+                }
+
+            } else {
+                alert("Insufficient funds!");
+            }
+        }
+
+        function generateShopHTML(isAttacker) {
+            const userColor = isAttacker ? "red" : "blue"; // Visual indicator of who is looking
+            
+            let html = `
+                <div class="shop-header">
+                    <div class="logo">Dai's Ducklings</div>
+                    <div class="balance-box" id="${isAttacker ? 'att-bal' : 'vic-bal'}">Credit: £${gameState.account.balance}</div>
+                </div>
+                <div style="margin-bottom: 10px; font-size: 0.8rem; color: #718096;">
+                    Logged in as: <strong>${gameState.account.username}</strong>
+                </div>
+                <div class="product-grid">
+            `;
+
+            products.forEach(p => {
+                html += `
+                    <div class="product-card">
+                        <span class="duck-emoji">${p.emoji}</span>
+                        <div class="duck-name">${p.name}</div>
+                        <div class="duck-price">£${p.price}</div>
+                        <button class="btn-buy" onclick="buyItem(${p.price}, ${isAttacker})">Buy Now</button>
+                    </div>
+                `;
+            });
+
+            html += `</div>`;
+            return html;
+        }
+
+        // --- NETWORK VISUALISATION ---
+
+        function logNetworkPacket(header, body) {
+            const packet = document.createElement('div');
+            packet.className = 'packet';
+            packet.innerHTML = `
+                <span class="packet-label">${header}</span>
+                <span class="packet-data">${body}</span>
+            `;
+            networkLog.appendChild(packet);
+            
+            // Auto scroll to bottom
+            networkLog.scrollTop = networkLog.scrollHeight;
+        }
+
+        // Start
+        init();
+
+    </script>
+</body>
+</html>
