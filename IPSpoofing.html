@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evil Twin & IP Spoofing Simulator | KS3/GCSE Comp Sci</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        
+        /* Custom ranges slider styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #ef4444;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #d1d5db;
+            border-radius: 2px;
+        }
+
+        /* Animations */
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+        
+        .animate-pulse-red { animation: pulse-red 2s infinite; }
+        .animate-pulse-green { animation: pulse-green 2s infinite; }
+
+        /* Node positioning */
+        .node { position: absolute; transform: translate(-50%, -50%); z-index: 20; transition: all 0.3s ease; }
+        #network-canvas { z-index: 10; }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden text-slate-800">
+
+    <!-- Header -->
+    <header class="bg-slate-900 text-white p-4 shadow-lg shrink-0 flex justify-between items-center z-40">
+        <div>
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <i data-lucide="shield-alert" class="text-red-400"></i>
+                Network Threat Simulator
+            </h1>
+            <p class="text-sm text-slate-400">GCSE/A-Level Computer Science Resource</p>
+        </div>
+        <div class="text-xs text-slate-500 bg-slate-800 px-3 py-1 rounded border border-slate-700">
+            Current Status: <span id="status-indicator" class="text-yellow-400 font-bold">Waiting for Setup</span>
+        </div>
+    </header>
+
+    <!-- Main Simulation Area -->
+    <main class="flex-grow relative bg-slate-100 overflow-hidden" id="simulation-area">
+        <!-- Canvas for drawing lines and signals -->
+        <canvas id="network-canvas" class="absolute top-0 left-0 w-full h-full block"></canvas>
+
+        <!-- Nodes (HTML Elements for accessibility and styling) -->
+        
+        <!-- VICTIM -->
+        <div id="node-victim" class="node flex flex-col items-center" style="top: 50%; left: 20%;">
+            <div class="bg-white p-3 rounded-full shadow-md border-2 border-blue-500 relative">
+                <i data-lucide="laptop" class="w-8 h-8 text-blue-600"></i>
+                <!-- Connection Status Badge -->
+                <div id="victim-badge" class="absolute -top-1 -right-1 w-4 h-4 bg-gray-400 rounded-full border border-white"></div>
+            </div>
+            <div class="mt-2 bg-white/90 px-2 py-1 rounded text-xs font-mono shadow border border-slate-200 text-center">
+                <strong>Victim PC</strong><br>
+                192.168.1.5
+            </div>
+        </div>
+
+        <!-- ROUTER -->
+        <div id="node-router" class="node flex flex-col items-center" style="top: 30%; left: 80%;">
+            <div id="router-icon-bg" class="bg-white p-3 rounded-full shadow-md border-2 border-green-500 relative transition-colors duration-500">
+                <i data-lucide="router" class="w-8 h-8 text-green-600"></i>
+                <!-- Firewall Icon -->
+                <div class="absolute -top-2 -right-2 bg-slate-800 text-white p-1 rounded-full shadow border border-white" title="Firewall Active">
+                    <i data-lucide="shield-check" class="w-3 h-3"></i>
+                </div>
+            </div>
+            <div class="mt-2 bg-white/90 px-2 py-1 rounded text-xs font-mono shadow border border-slate-200 text-center">
+                <strong>Safe_WiFi</strong><br>
+                192.168.1.1
+            </div>
+        </div>
+
+        <!-- ATTACKER -->
+        <div id="node-attacker" class="node flex flex-col items-center" style="top: 70%; left: 50%;">
+            <div class="bg-slate-800 p-3 rounded-full shadow-xl border-2 border-red-500 relative z-20">
+                <i data-lucide="skull" class="w-8 h-8 text-red-500"></i>
+            </div>
+            <div class="mt-2 bg-slate-800 text-white px-2 py-1 rounded text-xs font-mono shadow border border-red-500 text-center z-20">
+                <strong>Free_WiFi (Evil Twin)</strong><br>
+                192.168.1.15
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Controls & Logs -->
+    <!-- Changed height from h-1/3 to h-auto min-h-[280px] to prevent clipping -->
+    <footer class="h-auto min-h-[280px] bg-white border-t border-slate-200 shadow-[0_-5px_15px_rgba(0,0,0,0.1)] flex flex-col md:flex-row z-30 shrink-0">
+        
+        <!-- Controls Panel -->
+        <div class="w-full md:w-1/3 p-6 border-r border-slate-200 flex flex-col gap-4 bg-slate-50 relative">
+            <h3 class="font-bold text-slate-700 flex items-center gap-2">
+                <i data-lucide="gamepad-2" class="w-4 h-4"></i> Hacker Console
+            </h3>
+            
+            <!-- Signal Slider -->
+            <div id="slider-container" class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 ring-2 ring-blue-100 animate-pulse">
+                <div class="flex justify-between mb-2">
+                    <label class="text-xs font-bold uppercase text-slate-500">1. Signal Booster</label>
+                    <span id="signal-value" class="text-xs font-mono text-red-600 font-bold">0%</span>
+                </div>
+                <input type="range" id="signal-slider" min="0" max="100" value="0">
+                <p class="text-[10px] text-slate-400 mt-1">Boost signal > 50% to overpower legitimate router.</p>
+            </div>
+
+            <!-- Action Button -->
+            <!-- Renamed default text to 'Locked' to allow user to see it exists but is inactive -->
+            <button id="btn-login" disabled class="w-full py-4 rounded font-bold text-sm transition-all flex items-center justify-center gap-2 bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed">
+                <i data-lucide="lock" class="w-4 h-4"></i> Locked: Boost Signal First
+            </button>
+        </div>
+
+        <!-- Log Panel -->
+        <div class="w-full md:w-2/3 p-4 flex flex-col bg-slate-900 text-green-400 font-mono text-xs overflow-hidden h-[280px] md:h-auto">
+            <div class="mb-2 flex justify-between border-b border-slate-700 pb-1">
+                <span>>_ SYSTEM LOG</span>
+                <span class="animate-pulse">● LIVE</span>
+            </div>
+            <div id="log-container" class="overflow-y-auto flex-grow space-y-1 p-2">
+                <div class="opacity-50">[SYSTEM] Simulation initialized...</div>
+                <div class="opacity-50">[INFO] Victim connected to Safe_WiFi (192.168.1.1).</div>
+                <div class="text-yellow-400">[Guide] Drag the 'Signal Booster' slider to start.</div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- PACKET INSPECTOR MODAL (The X-Ray) -->
+    <div id="inspector-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-lg overflow-hidden border border-slate-300 transform transition-all scale-100">
+            <!-- Modal Header -->
+            <div class="bg-slate-800 text-white p-4 flex justify-between items-center">
+                <h3 class="font-bold flex items-center gap-2">
+                    <i data-lucide="microscope" class="text-blue-400"></i> Packet Intercepted
+                </h3>
+                <div class="text-xs bg-blue-600 px-2 py-0.5 rounded text-white">TCP/IP Header</div>
+            </div>
+            
+            <!-- Modal Body -->
+            <div class="p-6 space-y-4">
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-xs text-yellow-800 mb-4">
+                    <strong>Objective:</strong> The Router has a firewall. It only accepts traffic from known devices (The Victim). You must modify this packet to trick the router.
+                </div>
+
+                <!-- Packet Visual -->
+                <div class="grid grid-cols-1 gap-4 font-mono text-sm">
+                    
+                    <!-- Destination (Fixed) -->
+                    <div class="border border-slate-200 rounded p-2 bg-slate-50 opacity-70">
+                        <label class="block text-[10px] uppercase text-slate-400 font-bold">Destination IP</label>
+                        <div class="font-bold text-slate-700">192.168.1.1 (Router)</div>
+                    </div>
+
+                    <!-- Payload (Fixed) -->
+                    <div class="border border-slate-200 rounded p-2 bg-slate-50">
+                        <label class="block text-[10px] uppercase text-slate-400 font-bold">Payload (Data)</label>
+                        <div class="font-bold text-red-600">Password: "MySecretP@ss"</div>
+                        <div class="text-[10px] text-green-600 mt-1 italic">✓ Data captured & stored to log.</div>
+                    </div>
+
+                    <!-- Source (Editable - The Core Mechanic) -->
+                    <div class="border-2 border-blue-400 rounded p-3 bg-white relative">
+                        <label class="block text-[10px] uppercase text-blue-600 font-bold mb-1">Source IP (Sender)</label>
+                        <input type="text" id="input-source-ip" value="192.168.1.15" class="w-full text-lg font-bold border-b border-slate-300 focus:outline-none focus:border-blue-500 py-1 text-slate-800 placeholder-slate-300">
+                        <p class="text-[10px] text-slate-400 mt-1">Edit this to spoof the sender's identity.</p>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="bg-slate-50 p-4 border-t border-slate-200 flex justify-end gap-3">
+                <button id="btn-forward-packet" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded shadow transition-colors flex items-center gap-2">
+                    <i data-lucide="send"></i> Forward Packet
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SUCCESS / FAILURE OVERLAYS -->
+    <div id="result-overlay" class="hidden fixed inset-0 z-50 flex items-center justify-center pointer-events-none p-4">
+        <div id="result-message" class="bg-white p-6 rounded-xl shadow-2xl border-4 transform scale-0 transition-transform duration-300 flex flex-col items-center text-center max-w-md pointer-events-auto">
+            <div id="result-icon" class="mb-4 p-4 rounded-full bg-gray-100"></div>
+            <h2 id="result-title" class="text-2xl font-bold mb-2"></h2>
+            <p id="result-desc" class="text-slate-600 mb-6"></p>
+            <button onclick="resetSim()" class="bg-slate-800 text-white px-6 py-2 rounded hover:bg-slate-700">Reset Simulation</button>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // --- CONFIGURATION ---
+        // Helper to safely load icons
+        function refreshIcons() {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+        
+        // Wait for DOM to be fully loaded before running logic
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshIcons();
+            
+            const canvas = document.getElementById('network-canvas');
+            const ctx = canvas.getContext('2d');
+            const logContainer = document.getElementById('log-container');
+            
+            // Element References
+            const slider = document.getElementById('signal-slider');
+            const sliderContainer = document.getElementById('slider-container');
+            const signalValue = document.getElementById('signal-value');
+            const btnLogin = document.getElementById('btn-login');
+            const statusInd = document.getElementById('status-indicator');
+            const badge = document.getElementById('victim-badge');
+            const modal = document.getElementById('inspector-modal');
+            const inputSourceIp = document.getElementById('input-source-ip');
+            const btnForward = document.getElementById('btn-forward-packet');
+            const routerBg = document.getElementById('router-icon-bg');
+
+            // State Management
+            let state = {
+                width: 0,
+                height: 0,
+                attackerPower: 0, // 0 to 100
+                routerPower: 40, // Fixed
+                connectedTo: 'router', // 'router' or 'attacker'
+                packet: null, // { x, y, target, type, spoofed }
+                phase: 'SETUP' // SETUP, CONNECTED, PACKET_MOVING_1, INTERCEPT, PACKET_MOVING_2, END
+            };
+
+            // Node Positions (Percentages)
+            const nodes = {
+                victim: { x: 0.2, y: 0.5, el: document.getElementById('node-victim') },
+                router: { x: 0.8, y: 0.3, el: document.getElementById('node-router') },
+                attacker: { x: 0.5, y: 0.7, el: document.getElementById('node-attacker') }
+            };
+
+            // --- UTILS ---
+            function resize() {
+                const container = document.getElementById('simulation-area');
+                if (container) {
+                    canvas.width = container.clientWidth;
+                    canvas.height = container.clientHeight;
+                    state.width = canvas.width;
+                    state.height = canvas.height;
+                }
+            }
+            window.addEventListener('resize', resize);
+            // Initial resize
+            setTimeout(resize, 100);
+
+            function log(msg, type='info') {
+                const div = document.createElement('div');
+                const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
+                div.innerHTML = `<span class="opacity-50">[${time}]</span> ${msg}`;
+                if(type === 'error') div.className = "text-red-400 font-bold";
+                if(type === 'success') div.className = "text-green-400 font-bold";
+                if(type === 'warning') div.className = "text-yellow-400";
+                if(type === 'action') div.className = "text-blue-400 font-bold animate-pulse";
+                logContainer.appendChild(div);
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+
+            function getCoords(nodeName) {
+                return {
+                    x: nodes[nodeName].x * state.width,
+                    y: nodes[nodeName].y * state.height
+                };
+            }
+
+            // --- GAME LOOP & DRAWING ---
+            function draw() {
+                ctx.clearRect(0, 0, state.width, state.height);
+                
+                const vPos = getCoords('victim');
+                const rPos = getCoords('router');
+                const aPos = getCoords('attacker');
+
+                // 1. Draw Connection Line
+                ctx.beginPath();
+                ctx.lineWidth = 4;
+                let targetPos = state.connectedTo === 'router' ? rPos : aPos;
+                
+                // Gradient for line
+                let grad = ctx.createLinearGradient(vPos.x, vPos.y, targetPos.x, targetPos.y);
+                if (state.connectedTo === 'router') {
+                    grad.addColorStop(0, '#3b82f6'); // Blue
+                    grad.addColorStop(1, '#22c55e'); // Green
+                    ctx.setLineDash([10, 10]); // Dashed for standard wifi
+                    ctx.strokeStyle = '#94a3b8'; // Greyish for standard
+                } else {
+                    grad.addColorStop(0, '#3b82f6'); 
+                    grad.addColorStop(1, '#ef4444'); // Red
+                    ctx.setLineDash([]); // Solid for strong connection
+                    ctx.strokeStyle = '#ef4444';
+                }
+                
+                ctx.moveTo(vPos.x, vPos.y);
+                ctx.lineTo(targetPos.x, targetPos.y);
+                ctx.stroke();
+                ctx.setLineDash([]); // Reset
+
+                // 2. Draw Signals (Concentric Circles)
+                // Router Signal (Static)
+                drawSignal(rPos.x, rPos.y, state.routerPower, '#22c55e');
+                // Attacker Signal (Dynamic)
+                drawSignal(aPos.x, aPos.y, state.attackerPower, '#ef4444');
+
+                // 3. Draw Packet
+                if (state.packet) {
+                    drawPacket();
+                    updatePacket();
+                }
+
+                requestAnimationFrame(draw);
+            }
+
+            function drawSignal(x, y, power, color) {
+                const maxRadius = state.width * 0.4; // Max range
+                const currentRadius = (power / 100) * maxRadius;
+                
+                ctx.globalAlpha = 0.1;
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(x, y, Math.max(0, currentRadius), 0, Math.PI * 2);
+                ctx.fill();
+
+                // Outline
+                ctx.globalAlpha = 0.3;
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Inner ripples
+                if (power > 5) {
+                    ctx.beginPath();
+                    ctx.arc(x, y, Math.max(0, currentRadius * 0.6), 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                ctx.globalAlpha = 1.0;
+            }
+
+            function drawPacket() {
+                const p = state.packet;
+                ctx.fillStyle = p.color || '#3b82f6'; // Blue default
+                
+                // Packet body
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Icon detail
+                ctx.fillStyle = 'white';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('IP', p.x, p.y + 3);
+
+                // If spoofed, draw a "mask" effect
+                if (p.spoofed) {
+                    ctx.strokeStyle = '#3b82f6'; // Looks blue on outside
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+
+            function updatePacket() {
+                if (!state.packet) return;
+                
+                const p = state.packet;
+                const target = p.targetCoords;
+                
+                const dx = target.x - p.x;
+                const dy = target.y - p.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                const speed = 4;
+
+                if (dist < speed) {
+                    // Arrived
+                    p.x = target.x;
+                    p.y = target.y;
+                    onPacketArrived();
+                } else {
+                    p.x += (dx / dist) * speed;
+                    p.y += (dy / dist) * speed;
+                }
+            }
+
+            // --- GAME LOGIC ---
+
+            // 1. Slider Interaction
+            slider.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value);
+                state.attackerPower = val;
+                signalValue.innerText = val + '%';
+                
+                // Remove pulse animation once user interacts
+                if (sliderContainer.classList.contains('animate-pulse')) {
+                    sliderContainer.classList.remove('animate-pulse');
+                    sliderContainer.classList.remove('ring-2');
+                    sliderContainer.classList.remove('ring-blue-100');
+                }
+                
+                // Check for Evil Twin takeover
+                // Threshold lowered to 50 for better UX
+                if (state.connectedTo === 'router' && state.attackerPower > 50) {
+                    switchConnection('attacker');
+                } else if (state.connectedTo === 'attacker' && state.attackerPower < 40) {
+                    switchConnection('router');
+                }
+            });
+
+            function switchConnection(target) {
+                state.connectedTo = target;
+                if (target === 'attacker') {
+                    log('WARNING: Victim device auto-connected to stronger signal "Free_WiFi".', 'warning');
+                    log('Connection hijacked. Ready for data capture.', 'action');
+                    badge.className = "absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border border-white animate-pulse";
+                    statusInd.innerText = "COMPROMISED";
+                    statusInd.className = "text-red-500 font-bold animate-pulse";
+                    
+                    // Enable the attack button
+                    btnLogin.disabled = false;
+                    btnLogin.className = "w-full py-4 rounded font-bold text-sm transition-all flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white shadow-lg transform hover:-translate-y-1 cursor-pointer border-none";
+                    btnLogin.innerHTML = `<i data-lucide="unlock"></i> Wait for Victim Login`;
+                    refreshIcons();
+
+                } else {
+                    log('Victim connected to Safe_WiFi.', 'info');
+                    badge.className = "absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border border-white";
+                    statusInd.innerText = "SECURE";
+                    statusInd.className = "text-green-500 font-bold";
+                    
+                    // Disable button
+                    btnLogin.disabled = true;
+                    btnLogin.className = "w-full py-4 rounded font-bold text-sm transition-all flex items-center justify-center gap-2 bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed";
+                    btnLogin.innerHTML = `<i data-lucide="lock" class="w-4 h-4"></i> Locked: Boost Signal First`;
+                    refreshIcons();
+                }
+            }
+
+            // 2. Start Login (Send Packet)
+            btnLogin.addEventListener('click', () => {
+                if (state.phase !== 'SETUP' && state.phase !== 'CONNECTED') return; // Prevent double clicks
+                
+                log('Victim initiating login sequence...', 'info');
+                state.phase = 'PACKET_MOVING_1';
+                
+                const start = getCoords('victim');
+                const end = getCoords('attacker');
+                
+                state.packet = {
+                    x: start.x,
+                    y: start.y,
+                    targetCoords: end,
+                    type: 'auth',
+                    color: '#3b82f6', // Blue (innocent)
+                    spoofed: false
+                };
+                
+                // Disable controls
+                btnLogin.disabled = true;
+                slider.disabled = true;
+            });
+
+            function onPacketArrived() {
+                if (state.phase === 'PACKET_MOVING_1') {
+                    // Arrived at Attacker
+                    state.phase = 'INTERCEPT';
+                    log('PACKET INTERCEPTED by Evil Twin!', 'warning');
+                    log('Payload captured: "Password: MySecretP@ss"', 'success');
+                    
+                    // Open Inspector
+                    setTimeout(() => {
+                        modal.classList.remove('hidden');
+                        modal.querySelector('.transform').classList.add('scale-100');
+                        modal.querySelector('.transform').classList.remove('scale-95');
+                    }, 500);
+
+                } else if (state.phase === 'PACKET_MOVING_2') {
+                    // Arrived at Router
+                    state.phase = 'END';
+                    evaluateSuccess();
+                }
+            }
+
+            // 3. Inspector Interaction
+            btnForward.addEventListener('click', () => {
+                const sourceIp = inputSourceIp.value.trim();
+                const spoofed = (sourceIp === '192.168.1.5');
+                
+                modal.classList.add('hidden');
+                
+                log(`Forwarding packet to Router. Source Header: ${sourceIp}`, 'info');
+                
+                // Setup packet for leg 2
+                state.packet.targetCoords = getCoords('router');
+                state.packet.color = '#ef4444'; // Red (Malicious core)
+                if (spoofed) {
+                    state.packet.spoofed = true; // Visual "Cloak"
+                    // Log trickery
+                    log('APPLIED SPOOF: Packet disguised as 192.168.1.5', 'warning');
+                } else {
+                    state.packet.spoofed = false;
+                }
+
+                state.phase = 'PACKET_MOVING_2';
+            });
+
+            // 4. Evaluation
+            function evaluateSuccess() {
+                const overlay = document.getElementById('result-overlay');
+                const box = document.getElementById('result-message');
+                const title = document.getElementById('result-title');
+                const desc = document.getElementById('result-desc');
+                const icon = document.getElementById('result-icon');
+                
+                state.packet = null; // Remove packet
+                overlay.classList.remove('hidden');
+                setTimeout(() => box.classList.remove('scale-0'), 100);
+
+                if (inputSourceIp.value === '192.168.1.5') {
+                    // SUCCESS
+                    routerBg.className = "bg-white p-3 rounded-full shadow-md border-4 border-green-500 relative animate-pulse-green";
+                    title.innerText = "Attack Successful!";
+                    title.className = "text-2xl font-bold mb-2 text-green-600";
+                    desc.innerHTML = "You successfully spoofed the IP address.<br>The Router believed the packet came from the Victim.<br><br><strong>Result:</strong> Password stolen AND Victim stays connected.";
+                    icon.innerHTML = `<i data-lucide="check-circle" class="w-12 h-12 text-green-500"></i>`;
+                    log('Router Accepted Packet: HTTP 200 OK', 'success');
+                } else {
+                    // FAIL
+                    routerBg.className = "bg-white p-3 rounded-full shadow-md border-4 border-red-500 relative animate-pulse-red";
+                    title.innerText = "Attack Failed";
+                    title.className = "text-2xl font-bold mb-2 text-red-600";
+                    desc.innerHTML = `The Router rejected the packet.<br>It saw the Source IP was <strong>${inputSourceIp.value}</strong>, which is not in its trust list.<br><br>The Victim has lost connection and is now suspicious.`;
+                    icon.innerHTML = `<i data-lucide="x-circle" class="w-12 h-12 text-red-500"></i>`;
+                    log('Router Rejected Packet: Firewall Block (Unknown IP)', 'error');
+                }
+                refreshIcons();
+            }
+            
+            window.resetSim = function() {
+                location.reload();
+            }
+
+            // Start loop
+            requestAnimationFrame(draw);
+        });
+    </script>
+</body>
+</html>
