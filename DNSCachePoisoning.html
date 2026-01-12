@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNS Cache Poisoning Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Fira+Code:wght@400;600&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+        }
+
+        .mono {
+            font-family: 'Fira Code', monospace;
+        }
+
+        /* Animation Classes */
+        .packet {
+            position: fixed;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            z-index: 100;
+            transition: all linear;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            pointer-events: none;
+        }
+
+        .packet-request { background-color: #3b82f6; } /* Blue */
+        .packet-legit { background-color: #22c55e; } /* Green */
+        .packet-poison { background-color: #ef4444; } /* Red */
+
+        /* Connection Lines - Desktop Only */
+        .connector {
+            position: absolute;
+            background-color: #cbd5e1;
+            z-index: 0;
+            transform-origin: 0 50%;
+        }
+        
+        @media (max-width: 1024px) {
+            .connector { display: none; }
+        }
+
+        /* Pulse animation */
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        .attack-active {
+            animation: pulse-red 1.5s infinite;
+            border-color: #ef4444 !important;
+        }
+
+        /* Scanlines for Fake Site */
+        .scanlines {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.1) 50%,
+                rgba(0,0,0,0.1)
+            );
+            background-size: 100% 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+    <!-- Header -->
+    <header class="bg-slate-900 text-white p-4 shadow-lg sticky top-0 z-50">
+        <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-xl font-bold flex items-center gap-2">
+                    <i data-lucide="shield-alert" class="text-red-400"></i>
+                    The DNS Switcheroo
+                </h1>
+                <p class="text-xs text-slate-400">GCSE/A-Level Computer Science Resource</p>
+            </div>
+            
+            <div class="flex flex-wrap justify-center gap-3 text-xs md:text-sm">
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full bg-blue-500"></div> User
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full bg-green-500"></div> Legit
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full bg-red-500"></div> Poison
+                </div>
+                <button onclick="resetSim()" class="bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded border border-slate-600 transition-colors">
+                    Reset
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Game Area -->
+    <main class="flex-1 relative flex flex-col lg:flex-row p-4 lg:p-8 gap-8 lg:gap-6 bg-slate-50">
+        
+        <!-- Packet Container (Fixed Overlay) -->
+        <div id="packet-layer" class="fixed inset-0 pointer-events-none z-50"></div>
+
+        <!-- Column 1: The Victim (User) -->
+        <div class="w-full lg:w-1/4 flex flex-col gap-2 lg:gap-4 relative z-10">
+            <h3 class="lg:hidden font-bold text-slate-500 uppercase text-xs tracking-wider">Step 1: The Browser</h3>
+            
+            <!-- Browser Container: h-auto to fit content, min-height to look good empty -->
+            <div class="bg-white rounded-xl shadow-lg border border-slate-200 h-auto min-h-[16rem] lg:h-auto lg:flex-1 flex flex-col relative" id="user-browser">
+                <!-- Browser Bar -->
+                <div class="bg-slate-100 p-2 md:p-3 border-b border-slate-200 flex items-center gap-2">
+                    <div class="flex gap-1">
+                        <div class="w-2 h-2 md:w-3 md:h-3 rounded-full bg-red-400"></div>
+                        <div class="w-2 h-2 md:w-3 md:h-3 rounded-full bg-yellow-400"></div>
+                        <div class="w-2 h-2 md:w-3 md:h-3 rounded-full bg-green-400"></div>
+                    </div>
+                    <div class="flex-1 bg-white border border-slate-300 rounded px-2 py-1 text-xs md:text-sm text-slate-600 flex justify-between items-center">
+                        <span class="mono truncate">bank.com</span>
+                        <i data-lucide="lock" class="w-3 h-3 flex-shrink-0 ml-1"></i>
+                    </div>
+                    <button onclick="userVisit()" id="btn-visit" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs md:text-sm font-semibold transition-colors flex-shrink-0">
+                        Go
+                    </button>
+                </div>
+                
+                <!-- Browser Content Viewport -->
+                <div id="browser-viewport" class="p-4 flex flex-col items-center justify-center text-center flex-1">
+                    
+                    <!-- Placeholder -->
+                    <div id="content-placeholder" class="text-slate-400 py-8">
+                        <i data-lucide="globe" class="w-12 h-12 md:w-16 md:h-16 mx-auto mb-2 opacity-20"></i>
+                        <p class="text-sm">Enter URL and click Go</p>
+                    </div>
+
+                    <!-- Real Bank Content -->
+                    <div id="content-real" class="hidden w-full bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                        <div class="flex items-center justify-center gap-2 mb-4">
+                            <i data-lucide="building-2" class="text-green-700 w-6 h-6 md:w-8 md:h-8"></i>
+                            <h2 class="text-lg md:text-xl font-bold text-green-800">Global Bank</h2>
+                        </div>
+                        <p class="text-green-700 mb-4 text-xs md:text-sm">Welcome to the secure portal.</p>
+                        <div class="bg-white p-3 md:p-4 rounded border border-green-200 shadow-sm max-w-xs mx-auto w-full">
+                            <input disabled type="text" placeholder="Username" class="w-full mb-2 px-2 py-1 border rounded bg-slate-100 text-xs md:text-sm cursor-not-allowed">
+                            <input disabled type="password" placeholder="••••••" class="w-full mb-2 px-2 py-1 border rounded bg-slate-100 text-xs md:text-sm cursor-not-allowed">
+                            <button disabled class="w-full bg-green-600 text-white py-1 rounded opacity-50 cursor-not-allowed text-xs md:text-sm">Login</button>
+                        </div>
+                    </div>
+
+                    <!-- Fake Bank Content -->
+                    <div id="content-fake" class="hidden w-full bg-red-50 border-2 border-red-500 rounded-lg p-4 scanlines relative">
+                        <div class="absolute top-2 right-2 bg-red-600 text-white text-[10px] px-1 rounded uppercase tracking-wider font-bold">Fake Site</div>
+                        <div class="flex items-center justify-center gap-2 mb-4">
+                            <i data-lucide="building-2" class="text-red-700 w-6 h-6 md:w-8 md:h-8"></i>
+                            <h2 class="text-lg md:text-xl font-bold text-red-800">Global Bank</h2>
+                        </div>
+                        <p class="text-red-700 mb-4 text-xs md:text-sm">Urgent: Verify your account.</p>
+                        <div class="bg-white p-3 md:p-4 rounded border border-red-200 shadow-sm max-w-xs mx-auto w-full">
+                            <input id="fake-user" type="text" placeholder="Username" class="w-full mb-2 px-2 py-1 border rounded text-xs md:text-sm">
+                            <input id="fake-pass" type="password" placeholder="Password" class="w-full mb-2 px-2 py-1 border rounded text-xs md:text-sm">
+                            <button onclick="stealCreds()" class="w-full bg-red-600 hover:bg-red-700 text-white py-1 rounded font-bold text-xs md:text-sm mt-1">Login</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Connector (Desktop Only) -->
+            <div id="line-user-dns" class="connector h-1 w-12 bg-slate-300 absolute top-1/2 -right-6 transform -translate-y-1/2 hidden lg:block"></div>
+        </div>
+
+        <!-- Column 2: The Infrastructure (DNS Resolver) -->
+        <div class="w-full lg:w-1/4 flex flex-col gap-2 relative z-10">
+            <h3 class="lg:hidden font-bold text-slate-500 uppercase text-xs tracking-wider">Step 2: The Resolver</h3>
+            <div class="bg-slate-800 rounded-xl shadow-xl border border-slate-700 h-auto min-h-[12rem] lg:flex-1 flex flex-col p-4" id="dns-server">
+                <div class="flex items-center gap-2 mb-4 border-b border-slate-700 pb-2">
+                    <i data-lucide="server" class="text-blue-400"></i>
+                    <h2 class="text-white font-semibold text-sm md:text-base">ISP DNS Resolver</h2>
+                </div>
+
+                <!-- Cache Table -->
+                <div class="bg-slate-900 rounded p-2 flex-1 font-mono text-xs overflow-hidden flex flex-col justify-start">
+                    <div class="flex justify-between text-slate-400 mb-2 px-2 border-b border-slate-700 pb-1">
+                        <span>DOMAIN</span>
+                        <span>IP</span>
+                        <span>TTL</span>
+                    </div>
+                    
+                    <div class="relative min-h-[40px]">
+                        <!-- Cache Entry: Hidden by default, toggled via 'hidden' class -->
+                        <div id="cache-entry" class="hidden w-full flex justify-between items-center text-green-400 px-2 py-2 bg-slate-800/50 rounded border border-transparent transition-all">
+                            <span>bank.com</span>
+                            <span id="cache-ip">1.2.3.4</span>
+                            <span id="cache-ttl" class="text-yellow-300 font-bold bg-slate-700 px-2 py-0.5 rounded shadow-sm">60s</span>
+                        </div>
+                        
+                        <div id="cache-empty" class="absolute inset-0 text-slate-600 text-center flex items-center justify-center italic">
+                            Cache Empty
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 text-xs text-slate-400 bg-slate-900/50 p-2 rounded border border-slate-700">
+                    <strong>Status:</strong> <span id="dns-status">Idle</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column 3: The Internet (Real & Attacker) -->
+        <div class="w-full lg:flex-1 flex flex-col gap-6 relative z-10">
+            <h3 class="lg:hidden font-bold text-slate-500 uppercase text-xs tracking-wider">Step 3: The Internet</h3>
+            
+            <!-- Real Server -->
+            <div class="bg-green-50 rounded-xl shadow-md border-2 border-green-200 p-4 h-auto min-h-[140px] lg:h-1/3 flex flex-col relative" id="real-server">
+                <div class="absolute -left-12 top-1/2 w-12 h-1 bg-slate-300 connector hidden lg:block"></div> 
+                
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="font-bold text-green-800 flex items-center gap-2 text-sm md:text-base">
+                        <i data-lucide="database" class="w-4 h-4"></i> Real Auth. Server
+                    </h3>
+                    <span class="bg-green-200 text-green-800 text-[10px] md:text-xs px-2 py-1 rounded-full font-mono">1.2.3.4</span>
+                </div>
+                <div class="flex-1 flex items-center justify-center">
+                    <div class="text-center text-green-700 text-sm">
+                        <p>Hosts legitimate content.</p>
+                        <p class="text-xs opacity-75 mt-1 bg-green-100 inline-block px-2 py-0.5 rounded">Response: Slow (~3s)</p>
+                    </div>
+                </div>
+                <!-- Status Light -->
+                <div id="real-status-light" class="absolute top-4 right-4 w-3 h-3 rounded-full bg-slate-300 transition-colors duration-300"></div>
+            </div>
+
+            <!-- Attacker Control -->
+            <div class="bg-slate-800 rounded-xl shadow-2xl border-2 border-slate-700 p-4 flex-1 flex flex-col relative min-h-[250px]" id="attacker-server">
+                <div class="absolute -left-12 top-1/2 w-12 h-1 bg-slate-300 connector hidden lg:block"></div> 
+                
+                <div class="flex items-center justify-between mb-2 border-b border-slate-600 pb-2">
+                    <h3 class="font-bold text-red-400 flex items-center gap-2 text-sm md:text-base">
+                        <i data-lucide="skull" class="w-4 h-4"></i> Attacker Console
+                    </h3>
+                    <span class="bg-red-900/50 text-red-400 text-[10px] md:text-xs px-2 py-1 rounded-full font-mono">6.6.6.6</span>
+                </div>
+
+                <div class="flex flex-col md:flex-row gap-4 h-full">
+                    <!-- Attack Controls -->
+                    <div class="w-full md:w-1/2 md:border-r border-slate-600 md:pr-4 flex flex-col justify-center pb-4 md:pb-0 border-b md:border-b-0">
+                        <p class="text-slate-300 text-xs mb-4">
+                            <strong>Objective:</strong> Click button below to inject Fake IP before the Real Server responds.
+                        </p>
+                        <button id="btn-attack" onclick="launchAttack()" disabled class="w-full bg-slate-700 text-slate-500 font-bold py-3 rounded flex items-center justify-center gap-2 transition-all shadow-inner text-sm md:text-base">
+                            <i data-lucide="zap" class="w-4 h-4"></i> POISON DNS
+                        </button>
+                        <p id="attack-feedback" class="text-xs text-center mt-2 h-4 text-red-400 font-mono font-bold tracking-wide"></p>
+                    </div>
+
+                    <!-- Credential Harvester -->
+                    <div class="w-full md:w-1/2 md:pl-4 flex flex-col min-h-[120px]">
+                        <h4 class="text-[10px] font-mono text-slate-400 uppercase tracking-widest mb-2">Harvested Credentials</h4>
+                        <div id="stolen-creds" class="bg-black rounded p-2 flex-1 font-mono text-green-500 text-xs overflow-y-auto shadow-inner border border-slate-700 max-h-32 md:max-h-full">
+                            <span class="opacity-50 text-slate-600">Waiting for victims...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Footer / Education -->
+    <footer class="bg-white p-4 border-t border-slate-200 text-sm text-slate-600 z-20 sticky bottom-0">
+        <div class="flex flex-col md:flex-row justify-between items-center gap-2 text-center md:text-left">
+            <div>
+                <strong>Key Concept:</strong> DNS resolvers accept the <em class="text-blue-600 font-bold">first</em> response they receive.
+            </div>
+            <div class="flex gap-4 text-xs font-semibold">
+                <span class="flex items-center gap-1"><i data-lucide="clock" class="w-3 h-3"></i> Latency</span>
+                <span class="flex items-center gap-1"><i data-lucide="database" class="w-3 h-3"></i> TTL Persistence</span>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // State
+        const STATE = {
+            cache: { domain: null, ip: null, ttl: 0 },
+            isWaitingForResponse: false,
+            raceActive: false,
+            ttlInterval: null
+        };
+
+        const ELEMENTS = {
+            visitBtn: document.getElementById('btn-visit'),
+            attackBtn: document.getElementById('btn-attack'),
+            browserView: document.getElementById('browser-viewport'),
+            contentReal: document.getElementById('content-real'),
+            contentFake: document.getElementById('content-fake'),
+            contentPlaceholder: document.getElementById('content-placeholder'),
+            cacheEntry: document.getElementById('cache-entry'),
+            cacheEmpty: document.getElementById('cache-empty'),
+            cacheIp: document.getElementById('cache-ip'),
+            cacheTtl: document.getElementById('cache-ttl'),
+            dnsStatus: document.getElementById('dns-status'),
+            packetLayer: document.getElementById('packet-layer'),
+            realStatusLight: document.getElementById('real-status-light'),
+            attackFeedback: document.getElementById('attack-feedback'),
+            stolenCreds: document.getElementById('stolen-creds')
+        };
+
+        // DOM Coordinates helper - Handles scrolling properly by using viewport coords
+        function getCenter(element) {
+            const rect = element.getBoundingClientRect();
+            return {
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2
+            };
+        }
+
+        function createPacket(startEl, type) {
+            const packet = document.createElement('div');
+            packet.className = `packet ${type}`;
+            const start = getCenter(startEl);
+            packet.style.left = `${start.x}px`;
+            packet.style.top = `${start.y}px`;
+            ELEMENTS.packetLayer.appendChild(packet);
+            return packet;
+        }
+
+        function animatePacket(packet, targetEl, duration, callback) {
+            const target = getCenter(targetEl);
+            
+            packet.style.transition = `all ${duration}ms linear`;
+            packet.style.left = `${target.x}px`;
+            packet.style.top = `${target.y}px`;
+
+            setTimeout(() => {
+                packet.remove();
+                if(callback) callback();
+            }, duration);
+        }
+
+        // --- Core Logic ---
+
+        function resetSim() {
+            // Reset Cache
+            STATE.cache = { domain: null, ip: null, ttl: 0 };
+            if (STATE.ttlInterval) clearInterval(STATE.ttlInterval);
+            updateCacheDisplay();
+
+            // Reset UI
+            ELEMENTS.contentReal.classList.add('hidden');
+            ELEMENTS.contentFake.classList.add('hidden');
+            ELEMENTS.contentPlaceholder.classList.remove('hidden');
+            ELEMENTS.dnsStatus.innerText = 'Idle';
+            ELEMENTS.dnsStatus.className = '';
+            ELEMENTS.attackFeedback.innerText = '';
+            ELEMENTS.stolenCreds.innerHTML = '<span class="opacity-50 text-slate-600">Waiting for victims...</span>';
+            ELEMENTS.realStatusLight.className = "absolute top-4 right-4 w-3 h-3 rounded-full bg-slate-300 transition-colors duration-300";
+            
+            // Reset Buttons
+            ELEMENTS.visitBtn.disabled = false;
+            ELEMENTS.attackBtn.disabled = true;
+            ELEMENTS.attackBtn.classList.add('bg-slate-700', 'text-slate-500');
+            ELEMENTS.attackBtn.classList.remove('bg-red-600', 'text-white', 'attack-active', 'hover:bg-red-700');
+        }
+
+        function updateCacheDisplay() {
+            // Logic: Show entry ONLY if domain exists and TTL > 0
+            if (STATE.cache.domain && STATE.cache.ttl > 0) {
+                ELEMENTS.cacheEmpty.classList.add('hidden');
+                ELEMENTS.cacheEntry.classList.remove('hidden');
+                // Ensure the flex layout is preserved (tailwind 'hidden' toggles display:none)
+                ELEMENTS.cacheEntry.classList.add('flex');
+                
+                ELEMENTS.cacheIp.innerText = STATE.cache.ip;
+                ELEMENTS.cacheTtl.innerText = `${STATE.cache.ttl}s`;
+                
+                // Color coding for cache
+                if(STATE.cache.ip === '6.6.6.6') {
+                    // Poisoned
+                    ELEMENTS.cacheEntry.classList.remove('text-green-400', 'border-transparent');
+                    ELEMENTS.cacheEntry.classList.add('text-red-400', 'border-red-500');
+                    ELEMENTS.cacheTtl.className = "text-white font-bold bg-red-600 px-2 py-0.5 rounded shadow-sm";
+                } else {
+                    // Legit
+                    ELEMENTS.cacheEntry.classList.add('text-green-400', 'border-transparent');
+                    ELEMENTS.cacheEntry.classList.remove('text-red-400', 'border-red-500');
+                    ELEMENTS.cacheTtl.className = "text-yellow-300 font-bold bg-slate-700 px-2 py-0.5 rounded shadow-sm";
+                }
+            } else {
+                ELEMENTS.cacheEmpty.classList.remove('hidden');
+                ELEMENTS.cacheEntry.classList.add('hidden');
+                ELEMENTS.cacheEntry.classList.remove('flex');
+            }
+        }
+
+        function startTTL() {
+            if (STATE.ttlInterval) clearInterval(STATE.ttlInterval);
+            
+            // Force update immediately so it appears instantly
+            updateCacheDisplay();
+
+            STATE.ttlInterval = setInterval(() => {
+                if (STATE.cache.ttl > 0) {
+                    STATE.cache.ttl--;
+                    
+                    // Call the full update to ensure visibility persists and text updates
+                    updateCacheDisplay();
+                    
+                    if (STATE.cache.ttl <= 0) {
+                        clearInterval(STATE.ttlInterval);
+                        STATE.cache = { domain: null, ip: null, ttl: 0 };
+                        updateCacheDisplay();
+                    }
+                }
+            }, 1000);
+        }
+
+        // --- Step 1: User Request ---
+        function userVisit() {
+            ELEMENTS.visitBtn.disabled = true;
+            ELEMENTS.contentReal.classList.add('hidden');
+            ELEMENTS.contentFake.classList.add('hidden');
+            ELEMENTS.contentPlaceholder.classList.remove('hidden');
+            
+            // Visual: Packet User -> DNS
+            const p = createPacket(document.getElementById('user-browser'), 'packet-request');
+            animatePacket(p, document.getElementById('dns-server'), 1000, () => {
+                processDNS();
+            });
+        }
+
+        // --- Step 2: DNS Processing ---
+        function processDNS() {
+            ELEMENTS.dnsStatus.innerText = 'Looking up bank.com...';
+            
+            // Check Cache
+            if (STATE.cache.domain === 'bank.com' && STATE.cache.ttl > 0) {
+                ELEMENTS.dnsStatus.innerText = 'Found in Cache!';
+                // Instant return
+                setTimeout(() => {
+                    returnResponse(STATE.cache.ip);
+                }, 500);
+            } else {
+                // Not in cache, query upstream
+                ELEMENTS.dnsStatus.innerText = 'Querying Authoritative Server...';
+                queryUpstream();
+            }
+        }
+
+        // --- Step 3: Upstream Query (The Race) ---
+        function queryUpstream() {
+            STATE.raceActive = true;
+            STATE.isWaitingForResponse = true;
+
+            // Packet DNS -> Real Server
+            const pReal = createPacket(document.getElementById('dns-server'), 'packet-request');
+            animatePacket(pReal, document.getElementById('real-server'), 1000, () => {
+                // Once request hits real server, it "thinks" then responds slowly
+                ELEMENTS.realStatusLight.classList.remove('bg-slate-300');
+                ELEMENTS.realStatusLight.classList.add('bg-green-500', 'animate-pulse');
+                
+                // Enable Attacker
+                enableAttackMode();
+
+                // Real Response travels back SLOWLY (3 seconds)
+                setTimeout(() => {
+                    if (STATE.isWaitingForResponse) {
+                        sendLegitResponse();
+                    }
+                }, 3000);
+            });
+        }
+
+        function enableAttackMode() {
+            ELEMENTS.attackBtn.disabled = false;
+            ELEMENTS.attackBtn.classList.remove('bg-slate-700', 'text-slate-500');
+            ELEMENTS.attackBtn.classList.add('bg-red-600', 'text-white', 'attack-active', 'hover:bg-red-700');
+            ELEMENTS.attackFeedback.innerText = "QUERY IN TRANSIT - ATTACK NOW!";
+        }
+
+        // --- Step 4a: Legit Response ---
+        function sendLegitResponse() {
+            if (!STATE.isWaitingForResponse) return; // Race already lost/won
+            
+            STATE.isWaitingForResponse = false;
+            STATE.raceActive = false;
+            disableAttackMode();
+
+            const p = createPacket(document.getElementById('real-server'), 'packet-legit');
+            animatePacket(p, document.getElementById('dns-server'), 1000, () => {
+                // Update Cache
+                STATE.cache = { domain: 'bank.com', ip: '1.2.3.4', ttl: 15 }; // Short TTL for sim
+                startTTL();
+                
+                ELEMENTS.dnsStatus.innerText = 'Resolved: 1.2.3.4 (Legit)';
+                ELEMENTS.dnsStatus.classList.add('text-green-400');
+                
+                returnResponse('1.2.3.4');
+            });
+        }
+
+        // --- Step 4b: Attack Response ---
+        function launchAttack() {
+            if (!STATE.raceActive) return;
+
+            // Disable button immediately so they can't spam
+            disableAttackMode();
+
+            // Packet Attacker -> DNS (Fast!)
+            const p = createPacket(document.getElementById('attacker-server'), 'packet-poison');
+            animatePacket(p, document.getElementById('dns-server'), 500, () => {
+                if (STATE.isWaitingForResponse) {
+                    // Attacker Wins!
+                    STATE.isWaitingForResponse = false;
+                    STATE.raceActive = false;
+                    
+                    ELEMENTS.attackFeedback.innerText = "POISONING SUCCESSFUL!";
+                    
+                    // Poison Cache
+                    STATE.cache = { domain: 'bank.com', ip: '6.6.6.6', ttl: 30 }; // Longer TTL for impact
+                    startTTL();
+                    
+                    ELEMENTS.dnsStatus.innerText = 'Resolved: 6.6.6.6 (POISONED)';
+                    ELEMENTS.dnsStatus.classList.add('text-red-400');
+
+                    returnResponse('6.6.6.6');
+                } else {
+                    // Too late
+                    ELEMENTS.attackFeedback.innerText = "Too slow! Cache already set.";
+                }
+            });
+        }
+
+        function disableAttackMode() {
+            ELEMENTS.attackBtn.disabled = true;
+            ELEMENTS.attackBtn.classList.add('bg-slate-700', 'text-slate-500');
+            ELEMENTS.attackBtn.classList.remove('bg-red-600', 'text-white', 'attack-active', 'hover:bg-red-700');
+            ELEMENTS.realStatusLight.classList.remove('bg-green-500', 'animate-pulse');
+            ELEMENTS.realStatusLight.classList.add('bg-slate-300');
+        }
+
+        // --- Step 5: Deliver to User ---
+        function returnResponse(ip) {
+            // Packet DNS -> User
+            const type = (ip === '6.6.6.6') ? 'packet-poison' : 'packet-legit';
+            const p = createPacket(document.getElementById('dns-server'), type);
+            
+            animatePacket(p, document.getElementById('user-browser'), 1000, () => {
+                ELEMENTS.visitBtn.disabled = false;
+                ELEMENTS.contentPlaceholder.classList.add('hidden');
+                
+                if (ip === '6.6.6.6') {
+                    ELEMENTS.contentFake.classList.remove('hidden');
+                } else {
+                    ELEMENTS.contentReal.classList.remove('hidden');
+                }
+                
+                ELEMENTS.dnsStatus.classList.remove('text-green-400', 'text-red-400');
+            });
+        }
+
+        // --- Credential Harvesting Logic ---
+        function stealCreds() {
+            const user = document.getElementById('fake-user').value;
+            const pass = document.getElementById('fake-pass').value;
+
+            if (user && pass) {
+                const entry = document.createElement('div');
+                entry.className = "mb-1 border-b border-slate-700 pb-1";
+                entry.innerHTML = `> Usr: <span class="text-white">${user}</span><br>> Pwd: <span class="text-white">${pass}</span>`;
+                
+                // Clear the default message if it exists
+                if(ELEMENTS.stolenCreds.innerText.includes("Waiting")) {
+                    ELEMENTS.stolenCreds.innerHTML = '';
+                }
+                
+                ELEMENTS.stolenCreds.appendChild(entry);
+                ELEMENTS.stolenCreds.scrollTop = ELEMENTS.stolenCreds.scrollHeight;
+
+                // Clear inputs
+                document.getElementById('fake-user').value = '';
+                document.getElementById('fake-pass').value = '';
+                alert("Error: Connection lost. (But credentials have been stolen!)");
+            }
+        }
+
+    </script>
+</body>
+</html>
