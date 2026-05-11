@@ -1,6 +1,6 @@
 # DataInterceptionAndTheftSimulators
 
-Live demo: https://bassaleg-school.github.io/DataInterceptionAndTheftSimulators/
+Live demo: https://h-arnold.github.io/DataInterceptionAndTheftSimulators/
 
 A collection of standalone web pages that simulate common data interception and session-theft attacks for classroom use. These interactive activities are designed to support teaching and learning for the WJEC GCSE Computer Science specification (2025).
 
